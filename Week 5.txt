@@ -1,0 +1,154 @@
+Week 5
+Exercise 1. How many distinct dates are there in the saledate column of the transaction
+table for each month/year combination in the database? 
+
+SELECT COUNT (DISTINCT saledate) AS numofdates, EXTRACT(MONTH from saledate) AS month_num, EXTRACT(YEAR from saledate) AS Year_num
+FROM trnsact
+GROUP BY Year_num, month_num
+ORDER BY Year_num, month_num;
+
+Exercise 2. Use a CASE statement within an aggregate function to determine which sku
+had the greatest total sales during the combined summer months of June, July, and August. 
+
+SELECT SUM(CASE WHEN EXTRACT(MONTH from saledate)=6 THEN amt ELSE 0 END) AS June_sale, SUM(CASE WHEN EXTRACT(MONTH from saledate)=7 THEN amt ELSE 0 END) AS July_sale, SUM(CASE WHEN EXTRACT(MONTH from saledate)=8 THEN amt ELSE 0 END) AS Aug_sale, June_sale+July_sale+Aug_sale AS Summer_sale, sku
+FROM trnsact
+WHERE stype='P'
+GROUP BY sku
+ORDER BY Summer_sale DESC;
+
+Exercise 3. How many distinct dates are there in the saledate column of the transaction
+table for each month/year/store combination in the database? Sort your results by the
+number of days per combination in ascending order. 
+
+SELECT COUNT (DISTINCT saledate) AS numofdates, store, EXTRACT(MONTH from saledate) AS month_num, EXTRACT(YEAR from saledate) AS Year_num
+FROM trnsact
+GROUP BY store, Year_num, month_num
+ORDER BY numofdates;
+
+Exercise 4. What is the average daily revenue for each store/month/year combination in
+the database? Calculate this by dividing the total revenue for a group by the number of
+sales days available in the transaction table for that group. 
+
+SELECT COUNT (DISTINCT t.saledate) AS numofdates, t.store, EXTRACT(YEAR from t.saledate)||EXTRACT(MONTH from t.saledate) AS year_month, SUM(t.amt) / numofdates AS Daily_Average_Revenue
+FROM trnsact t INNER JOIN store_msa s ON t.store=s.store 
+WHERE stype='P' AND saledate < '2005-08-01'
+GROUP BY t.store, year_month
+ORDER BY year_month DESC
+HAVING numofdates >= 20 ;
+
+Exercise 5. What is the average daily revenue brought in by Dillard’s stores in areas of
+high, medium, or low levels of high school education? 
+
+SELECT CASE WHEN s.msa_high>50.0 AND s.msa_high<60.0 THEN 'low'
+            WHEN s.msa_high>60.1 AND s.msa_high<70.0 THEN 'medium'
+            WHEN s.msa_high>70.0 THEN 'high' END AS Education, SUM(daily_rev.amt_sum)/SUM(daily_rev.numofdates) AS group_avg
+FROM store_msa s JOIN (SELECT COUNT (DISTINCT saledate) AS numofdates, store, EXTRACT(YEAR from saledate)||EXTRACT(MONTH from saledate) AS year_month, SUM(amt) AS amt_sum
+FROM trnsact
+WHERE stype='P' AND saledate < '2005-08-01'
+GROUP BY store, year_month
+HAVING numofdates >= 20) AS daily_rev
+ON s.store= daily_rev.store
+GROUP BY Education;
+
+Exercise 6. Compare the average daily revenues of the stores with the highest median
+msa_income and the lowest median msa_income. In what city and state were these stores,
+and which store had a higher average daily revenue? 
+
+SELECT Top1.state, Top1.city, SUM(daily_rev.amt_sum)/SUM(daily_rev.numofdates) AS group_avg
+FROM (SELECT TOP 1 msa_income, state, city, store
+ FROM store_msa ORDER BY msa_income DESC) Top1 JOIN (SELECT COUNT (DISTINCT saledate) AS numofdates, store, EXTRACT(YEAR from saledate)||EXTRACT(MONTH from saledate) AS year_month, SUM(amt) AS amt_sum
+FROM trnsact
+WHERE stype='P' AND saledate < '2005-08-01'
+GROUP BY store, year_month
+HAVING numofdates >= 20) AS daily_rev
+ON Top1.store= daily_rev.store
+GROUP BY city, state;
+
+SELECT low.state, low.city, SUM(daily_rev.amt_sum)/SUM(daily_rev.numofdates) AS group_avg
+FROM (SELECT TOP 1 msa_income, state, city, store
+ FROM store_msa ORDER BY msa_income ASC) low JOIN (SELECT COUNT (DISTINCT saledate) AS numofdates, store, EXTRACT(YEAR from saledate)||EXTRACT(MONTH from saledate) AS year_month, SUM(amt) AS amt_sum
+FROM trnsact
+WHERE stype='P' AND saledate < '2005-08-01'
+GROUP BY store, year_month
+HAVING numofdates >= 20) AS daily_rev
+ON low.store= daily_rev.store
+GROUP BY city, state;
+
+Exercise 7: What is the brand of the sku with the greatest standard deviation in sprice?
+Only examine skus that have been part of over 100 transactions. 
+
+SELECT t.sku, STDDEV_SAMP(t.sprice) AS STDSPrice, s.brand, COUNT(t.sku) AS NumofTrans
+FROM trnsact t JOIN skuinfo s ON t.sku=s.sku
+WHERE t.stype = 'P'
+GROUP BY t.sku, brand
+HAVING NumofTrans > 100
+ORDER BY STDSPrice DESC;
+
+Exercise 8: Examine all the transactions for the sku with the greatest standard deviation in
+sprice, but only consider skus that are part of more than 100 transactions. 
+
+SELECT *
+FROM trnsact
+WHERE sku=2762683;
+
+Exercise 9: What was the average daily revenue Dillard’s brought in during each month of
+the year? 
+
+SELECT COUNT (DISTINCT saledate) AS numofdates, EXTRACT(YEAR from saledate)||EXTRACT(MONTH from saledate) AS year_month, SUM(amt) / numofdates AS Daily_Average_Revenue
+FROM trnsact
+WHERE stype='P' AND saledate < '2005-08-01'
+GROUP BY year_month
+ORDER BY Daily_Average_Revenue DESC
+HAVING numofdates >= 20 ;
+
+Exercise 10: Which department, in which city and state of what store, had the greatest %
+increase in average daily sales revenue from November to December? 
+
+
+SELECT d.deptdesc, s.city, s.state, Rev_change 
+FROM (
+  SELECT store, sku,
+SUM(CASE WHEN EXTRACT(MONTH from saledate)=11 THEN amt END) AS Nov_sale, 
+SUM(CASE WHEN EXTRACT(MONTH from saledate)=12 THEN amt END) AS Dec_sales, 
+count(distinct case when extract(month from saledate) = 11 then saledate end) as Nov_days, 
+count(distinct case when extract(month from saledate) = 12 then saledate end) as Dec_days, 
+Nov_sale/Nov_days AS Nov_rev, 
+Dec_sales/Dec_days AS Dec_rev, 
+(Dec_rev-Nov_rev)/Nov_rev AS Rev_change
+FROM trnsact t
+GROUP BY store, sku
+WHERE t.stype='P' AND t.saledate < '2005-08-01'
+HAVING Nov_days > 20
+AND Dec_days > 20 AND SUM(amt)>1000) AS rev
+LEFT JOIN skuinfo sk ON rev.sku=sk.sku LEFT JOIN store_msa s ON rev.store=s.store LEFT JOIN deptinfo d ON sk.dept=d.dept 
+GROUP BY deptdesc, city, state, Rev_change
+ORDER BY Rev_change DESC;
+
+
+
+Exercise 11: What is the city and state of the store that had the greatest decrease in
+average daily revenue from August to September? 
+
+
+SELECT s.city, s.state, Rev_change 
+FROM (
+  SELECT DISTINCT store, 
+sku, 
+SUM(CASE WHEN EXTRACT(MONTH from saledate)=8 THEN amt END) AS Aug_sale, 
+SUM(CASE WHEN EXTRACT(MONTH from saledate)=9 THEN amt END) AS Sep_sales, 
+count(distinct case when extract(month from saledate) = 8 then saledate end) as Aug_days, 
+count(distinct case when extract(month from saledate) = 9 then saledate end) as Sep_days, 
+Aug_sale/Aug_days AS Aug_rev, 
+Sep_sales/Sep_days AS Sep_rev, 
+(Sep_rev-Aug_rev) AS Rev_change
+FROM trnsact t
+GROUP BY store, sku 
+WHERE t.stype='P' AND t.saledate < '2005-08-01'
+HAVING Aug_days > 20
+AND Sep_days > 20) AS rev
+JOIN store_msa s ON rev.store=s.store 
+GROUP BY city, state, Rev_change
+ORDER BY Rev_change ASC;
+
+
+
